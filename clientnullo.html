@@ -13,7 +13,7 @@
     background-color:rgba(0,0,255,0.3);
 }
 .wrap {
-    width: 55em; 
+    width: 50em; 
     word-wrap: break-word;
     font-family: arial;
     font-size: 1.1em;
@@ -32,20 +32,20 @@ code {
 <ul>
 <li><p class="list">&nbsp;Background</p></li>
 <p class="wrap">
-Without getting too wonkish, TSL 1.2 introduces a signature algorithms extension clients can use to tell servers which hash/signature algorithms they can use when verifying server messages (e.g. server certificates, server key exchange, etc.).
-<br><br>This is done (mod details) by adding a sequence of hash/signature pairs in descending preference order to the client hello message of the handshake protocol.
-<br><br>When server-side OpenSSL receives a client hello with a signature algorithms extension, it processes it and generates a "shared" list (intersection of client's list and server's valid/allowed list).
+Without getting too wonkish, TLS 1.2 introduces a signature algorithms extension clients can use to tell servers which hash/signature algorithms they can use when verifying server messages (e.g. server certificates, server key exchange, etc.).
+<br><br>This is done (mod details) by adding a sequence of hash/signature algorithm pairs in descending preference order to the client hello message of the handshake protocol.
+<br><br>When server-side OpenSSL receives a client hello with a signature algorithms extension, it processes the client's hash/signature algorithm list and generates a "shared" list (intersection of client's list and server's valid/allowed list).
 <br><br>So far, so good.
 </p>
 <li><p class="list">&nbsp;Issue</p></li>
 <p class="wrap">
 Clients may choose to update their preference-ordered hash/signature pairs by initiating a renegotiation (used to establish new cryptographic parameters over an existing encrypted channel).
 <br><br>
-This is where OpenSSL got sloppy. Though OpenSSL correctly initializes the shared signature algorithms pointer before processing lists received during renegotiation, version 1.0.2 failed to initialize the shared list's length to 0.
+This is where OpenSSL got sloppy. Though OpenSSL was discarding the previous shared signature algorithms structure before processing a new list received during renegotiation, version 1.0.2 failed to reset the shared list's size to zero.
 <br><br>
-To illustrate why this is a problem, assume 15 hash/signature pairs make it into the "shared" list during the initial handshake process. Later, during renegotiation, none of the hash/signature pairs sent by the client are allowed/valid so the "shared" list is now empty. More precisely, the <code>shared_sigalgs</code> pointer in the <codeword>CERT</codeword> structure is <codeword>NULL</codeword> while list length remained untouched.
+To illustrate why this is a problem, assume 15 hash/signature pairs make it into the shared list during the initial handshake process. Later, during a renegotiation, none of the hash/signature algorithm pairs sent by the client are allowed/valid so the shared list is empty. More precisely, the shared_sigalgs pointer in the <codeword>CERT</codeword> structure is <codeword>NULL</codeword>. However, the shared list's size isn't reset to zero - it remains 15 in our example.
 <br><br>
-When we arrive to the code below (present in OpenSSL 1.0.2), <code>c->shared_sigalgslen</code> equals 15 and we get a <codeword>NULL</codeword> pointer dereference in line 3713.
+When we arrive to the code below (present in OpenSSL 1.0.2), <code>c->shared_sigalgslen</code>==15 and we get a <codeword>NULL</codeword> pointer dereference in line 3713.
 
 The fix was relatively simple: when freeing the memory pointed to by shared_sigalgs and setting the pointer to <codeword>NULL</codeword>, also zero its length: shared_sigalgslen.
 </p>
